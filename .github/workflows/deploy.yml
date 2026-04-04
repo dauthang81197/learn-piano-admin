@@ -1,0 +1,145 @@
+name: Deploy Admin to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE: coursue-admin
+  VPS_HOST: ${{ secrets.VPS_HOST }}
+  VPS_USER: ${{ secrets.VPS_USER }}
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run type check
+        run: npx tsc --noEmit
+
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    needs: lint
+    # Only build/deploy on push (not on PR)
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # -------- BUILD DOCKER IMAGE --------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub (optional)
+        if: ${{ env.DOCKER_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL="${{ secrets.NEXT_PUBLIC_API_URL }}" \
+            -t $DOCKER_IMAGE:latest \
+            -t $DOCKER_IMAGE:${{ github.sha }} \
+            .
+          docker save $DOCKER_IMAGE:latest | gzip > image.tar.gz
+
+      # -------- DEPLOY TO VPS --------
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy image & compose file to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "image.tar.gz,docker-compose.prod.yml"
+          target: "/home/${{ env.VPS_USER }}/coursue-admin"
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /home/${{ env.VPS_USER }}/coursue-admin
+
+            # Load Docker image
+            echo "📦 Loading Docker image..."
+            docker load < image.tar.gz
+            rm image.tar.gz
+
+            # Write .env for production
+            cat > .env << EOF
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            EOF
+
+            # Deploy with production compose file
+            echo "🚀 Deploying..."
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+
+            echo "📊 Container status:"
+            docker compose -f docker-compose.prod.yml ps
+
+      # -------- VERIFY DEPLOYMENT --------
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sleep 15
+            cd /home/${{ env.VPS_USER }}/coursue-admin
+
+            if docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+              echo "✅ Deployment successful!"
+              docker compose -f docker-compose.prod.yml ps
+              echo ""
+              echo "📋 Recent logs:"
+              docker compose -f docker-compose.prod.yml logs --tail=30
+            else
+              echo "❌ Deployment failed!"
+              docker compose -f docker-compose.prod.yml ps
+              echo ""
+              echo "📋 Error logs:"
+              docker compose -f docker-compose.prod.yml logs --tail=100
+              exit 1
+            fi
+
