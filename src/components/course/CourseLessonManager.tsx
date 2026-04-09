@@ -546,7 +546,7 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
 
                 {blocks.length === 0 ? (
                   <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
-                    Chưa có nội dung. Nhấn "+ Text", "+ Video" hoặc "+ Ảnh" để thêm block.
+                    Chưa có nội dung. Nhấn &quot;+ Text&quot;, &quot;+ Video&quot; hoặc &quot;+ Ảnh&quot; để thêm block.
                   </div>
                 ) : (
                   <div className="space-y-3">
