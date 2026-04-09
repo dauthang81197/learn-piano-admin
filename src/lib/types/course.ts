@@ -45,58 +45,76 @@ export interface UpdateSectionDto {
   orderIndex?: number;
 }
 
+// ─── Lesson Content Blocks ────────────────────────────────────────────────────
+export enum ContentBlockType {
+  TEXT = "text",
+  VIDEO = "video",
+  IMAGE = "image",
+}
+
+export interface LessonContent {
+  id: string;
+  lessonId: string;
+  type: ContentBlockType;
+  order: number;
+  textData?: string | null;
+  url?: string | null;
+  duration?: number | null;
+  caption?: string | null;
+  altText?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateLessonContentDto {
+  type: ContentBlockType;
+  order: number;
+  textData?: string;
+  url?: string;
+  duration?: number;
+  caption?: string;
+  altText?: string;
+}
+
 // ─── Lesson ───────────────────────────────────────────────────────────────────
 export enum LessonType {
-  VIDEO = "video",
   THEORY = "theory",
-  ARTICLE = "article",
   QUIZ = "quiz",
-  RESOURCE = "resource",
 }
 
 export interface Lesson {
   id: string;
   title: string;
-  description?: string;
   type: LessonType;
-  content?: string | null;
+  contents: LessonContent[];
   xpReward?: number;
   isPremium?: boolean;
-  isFree?: boolean;
-  duration?: number;
   order?: number;
-  orderIndex?: number;
+  quizIds?: string[];
   locked?: boolean;
   isCompleted?: boolean;
-  videoUrl?: string;
-  videoKey?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface CreateLessonDto {
   title: string;
-  description?: string;
   type: LessonType;
-  content?: string;
+  contents: CreateLessonContentDto[];
   xpReward?: number;
   isPremium?: boolean;
-  isFree?: boolean;
-  duration?: number;
-  orderIndex?: number;
+  quizIds?: string[];
   courseId?: string;
   order: number;
 }
 
 export interface UpdateLessonDto {
   title?: string;
-  description?: string;
   type?: LessonType;
-  content?: string;
+  contents?: CreateLessonContentDto[];
   xpReward?: number;
   isPremium?: boolean;
-  isFree?: boolean;
-  duration?: number;
+  quizIds?: string[];
   order?: number;
 }
 
@@ -135,7 +153,7 @@ export interface RoadmapLesson {
   isPremium: boolean;
   locked: boolean;
   isCompleted: boolean;
-  content: string | null;
+  contents: LessonContent[];
 }
 
 export interface RoadmapResponse {
