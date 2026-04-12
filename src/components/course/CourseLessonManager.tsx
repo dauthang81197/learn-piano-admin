@@ -186,16 +186,22 @@ function MediaPicker({
                       key={m.id}
                       type="button"
                       onClick={() => { onSelect(m); setOpen(false); }}
-                      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition hover:border-blue-400 ${
+                      className={`flex flex-col rounded-lg overflow-hidden border-2 transition hover:border-blue-400 ${
                         selectedMedia?.id === m.id ? "border-blue-500 ring-2 ring-blue-300" : "border-gray-200"
                       }`}
                     >
-                      <AuthImage mediaId={m.id} alt={m.originalName} className="absolute inset-0 w-full h-full object-cover" />
-                      {selectedMedia?.id === m.id && (
-                        <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                          <span className="text-white text-xl">✓</span>
-                        </div>
-                      )}
+                      <div className="relative aspect-video w-full bg-gray-100">
+                        <AuthImage mediaId={m.id} alt={m.originalName} className="absolute inset-0 w-full h-full object-cover" />
+                        {selectedMedia?.id === m.id && (
+                          <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                            <span className="text-white text-xl">✓</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-2 py-1.5 bg-white w-full text-left">
+                        <p className="text-xs text-gray-700 truncate font-medium">{m.originalName}</p>
+                        <p className="text-xs text-gray-400">{formatBytes(m.size)}</p>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -254,6 +260,8 @@ function BlockEditor({
   onMoveDown: () => void;
 }) {
 
+  const resolvedMedia = block._media ?? (block.mediaId ? (mediaList.find((m) => m.id === block.mediaId) ?? null) : null);
+
   return (
     <div className={`border border-l-4 rounded-xl p-4 space-y-3 ${BLOCK_COLORS[block.type] ?? "bg-gray-50"}`}>
       <div className="flex items-center justify-between">
@@ -303,7 +311,7 @@ function BlockEditor({
           <MediaPicker
             mediaType="video"
             mediaList={mediaList}
-            selectedMedia={block._media}
+            selectedMedia={resolvedMedia}
             onSelect={onMediaSelect}
             onClear={() => onMediaSelect(null)}
           />
@@ -322,7 +330,7 @@ function BlockEditor({
           <MediaPicker
             mediaType="image"
             mediaList={mediaList}
-            selectedMedia={block._media}
+            selectedMedia={resolvedMedia}
             onSelect={onMediaSelect}
             onClear={() => onMediaSelect(null)}
           />
