@@ -45,6 +45,26 @@ export interface UpdateSectionDto {
   orderIndex?: number;
 }
 
+// ─── Media ────────────────────────────────────────────────────────────────────
+export enum MediaType {
+  IMAGE = "image",
+  VIDEO = "video",
+}
+
+export interface Media {
+  id: string;
+  originalName: string;
+  filename: string;
+  key: string;
+  url: string;
+  type: MediaType;
+  mimeType: string;
+  size: number;
+  uploadedById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // ─── Lesson Content Blocks ────────────────────────────────────────────────────
 export enum ContentBlockType {
   TEXT = "text",
@@ -58,7 +78,8 @@ export interface LessonContent {
   type: ContentBlockType;
   order: number;
   textData?: string | null;
-  url?: string | null;
+  mediaId?: string | null;
+  media?: Media | null;
   duration?: number | null;
   caption?: string | null;
   altText?: string | null;
@@ -70,7 +91,7 @@ export interface CreateLessonContentDto {
   type: ContentBlockType;
   order: number;
   textData?: string;
-  url?: string;
+  mediaId?: string;
   duration?: number;
   caption?: string;
   altText?: string;

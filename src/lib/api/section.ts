@@ -14,17 +14,17 @@ export const sectionApi = {
   },
 
   create: async (courseId: string, data: CreateSectionData): Promise<Section> => {
-    const response = await apiClient.post(`/courses/${courseId}/sections`, data);
+    const response = await apiClient.post(`/admin/courses/${courseId}/sections`, data);
     return response.data;
   },
 
   update: async (id: string, data: UpdateSectionDto): Promise<Section> => {
-    const response = await apiClient.put(`/sections/${id}`, data);
+    const response = await apiClient.put(`/admin/sections/${id}`, data);
     return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/sections/${id}`);
+    await apiClient.delete(`/admin/sections/${id}`);
   },
 };
 
