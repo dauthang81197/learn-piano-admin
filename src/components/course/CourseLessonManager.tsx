@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { AuthImage } from "@/components/base/AuthImage";
 import { courseApi } from "@/lib/api/course";
 import { lessonApi } from "@/lib/api/lesson";
+import { mediaApi } from "@/lib/api/media";
 import { Button } from "@/components/base/Button";
 import { Input } from "@/components/base/Input";
 import { Textarea } from "@/components/base/Textarea";
-import type {
+import {
   RoadmapLesson,
   Lesson,
   LessonType,
   CreateLessonContentDto,
   ContentBlockType,
+  Media,
 } from "@/lib/types/course";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -51,6 +54,11 @@ interface LessonForm {
   order: number;
 }
 
+// Extend DTO with a transient `_media` field to hold the resolved Media object for display
+interface BlockState extends CreateLessonContentDto {
+  _media?: Media | null;
+}
+
 const emptyForm = (): LessonForm => ({
   title: "",
   type: "theory" as LessonType,
@@ -59,15 +67,168 @@ const emptyForm = (): LessonForm => ({
   order: 0,
 });
 
-const emptyBlock = (type: ContentBlockType, order: number): CreateLessonContentDto => ({
+const emptyBlock = (type: ContentBlockType, order: number): BlockState => ({
   type,
   order,
   textData: type === "text" ? "" : undefined,
-  url: type !== "text" ? "" : undefined,
+  mediaId: undefined,
+  _media: undefined,
   duration: type === "video" ? undefined : undefined,
   caption: type === "image" ? "" : undefined,
   altText: type === "image" ? "" : undefined,
 });
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ─── Media Picker ─────────────────────────────────────────────────────────────
+
+function MediaPicker({
+  mediaType,
+  mediaList,
+  selectedMedia,
+  onSelect,
+  onClear,
+}: {
+  mediaType: "image" | "video";
+  mediaList: Media[];
+  selectedMedia: Media | null | undefined;
+  onSelect: (media: Media) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const filtered = mediaList.filter((m) => m.type === "image" || m.type === "video");
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-700">
+        {mediaType === "video" ? "Video *" : "Ảnh *"}
+      </label>
+
+      {/* Selected preview */}
+      {selectedMedia ? (
+        <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg">
+          {mediaType === "image" ? (
+            <div className="relative w-14 h-10 rounded overflow-hidden shrink-0 bg-gray-100">
+              <AuthImage mediaId={selectedMedia.id} alt={selectedMedia.originalName} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded bg-blue-100 flex items-center justify-center shrink-0">
+              <span className="text-blue-600 text-lg">▶</span>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800 truncate">{selectedMedia.originalName}</p>
+            <p className="text-xs text-gray-400">{formatBytes(selectedMedia.size)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-gray-400 hover:text-red-500 transition p-1 shrink-0"
+            title="Bỏ chọn"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition"
+        >
+          <span>{mediaType === "image" ? "🖼" : "▶"}</span>
+          Chọn {mediaType === "image" ? "ảnh" : "video"} từ thư viện
+        </button>
+      )}
+
+      {!selectedMedia && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-xs text-blue-600 hover:underline"
+        >
+          {selectedMedia ? "Đổi media khác" : "Xem thư viện →"}
+        </button>
+      )}
+
+      {selectedMedia && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-xs text-blue-600 hover:underline"
+        >
+          Đổi media khác
+        </button>
+      )}
+
+      {/* Picker modal */}
+      {open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+              <h4 className="font-bold text-gray-900">
+                Thư viện {mediaType === "image" ? "Ảnh" : "Video"}
+              </h4>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-5">
+              {filtered.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">
+                  Chưa có {mediaType === "image" ? "ảnh" : "video"} nào được upload.
+                </div>
+              ) : mediaType === "image" ? (
+                <div className="grid grid-cols-3 gap-3">
+                  {filtered.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { onSelect(m); setOpen(false); }}
+                      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition hover:border-blue-400 ${
+                        selectedMedia?.id === m.id ? "border-blue-500 ring-2 ring-blue-300" : "border-gray-200"
+                      }`}
+                    >
+                      <AuthImage mediaId={m.id} alt={m.originalName} className="absolute inset-0 w-full h-full object-cover" />
+                      {selectedMedia?.id === m.id && (
+                        <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                          <span className="text-white text-xl">✓</span>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filtered.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { onSelect(m); setOpen(false); }}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition hover:border-blue-400 ${
+                        selectedMedia?.id === m.id ? "border-blue-500 bg-blue-50" : "border-gray-200"
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded bg-blue-100 flex items-center justify-center shrink-0">
+                        <span className="text-blue-600">▶</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{m.originalName}</p>
+                        <p className="text-xs text-gray-400">{m.mimeType} · {formatBytes(m.size)}</p>
+                      </div>
+                      {selectedMedia?.id === m.id && <span className="text-blue-600 font-bold shrink-0">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Block Editor ─────────────────────────────────────────────────────────────
 
@@ -75,19 +236,24 @@ function BlockEditor({
   block,
   index,
   total,
+  mediaList,
   onChange,
+  onMediaSelect,
   onRemove,
   onMoveUp,
   onMoveDown,
 }: {
-  block: CreateLessonContentDto;
+  block: BlockState;
   index: number;
   total: number;
+  mediaList: Media[];
   onChange: (field: keyof CreateLessonContentDto, value: string | number) => void;
+  onMediaSelect: (media: Media | null) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+
   return (
     <div className={`border border-l-4 rounded-xl p-4 space-y-3 ${BLOCK_COLORS[block.type] ?? "bg-gray-50"}`}>
       <div className="flex items-center justify-between">
@@ -105,26 +271,20 @@ function BlockEditor({
             onClick={onMoveUp}
             className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
             title="Move up"
-          >
-            ▲
-          </button>
+          >▲</button>
           <button
             type="button"
             disabled={index === total - 1}
             onClick={onMoveDown}
             className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
             title="Move down"
-          >
-            ▼
-          </button>
+          >▼</button>
           <button
             type="button"
             onClick={onRemove}
             className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
             title="Remove block"
-          >
-            ✕
-          </button>
+          >✕</button>
         </div>
       </div>
 
@@ -140,11 +300,12 @@ function BlockEditor({
 
       {block.type === "video" && (
         <div className="space-y-3">
-          <Input
-            label="URL Video *"
-            value={block.url ?? ""}
-            onChange={(e) => onChange("url", e.target.value)}
-            placeholder="https://..."
+          <MediaPicker
+            mediaType="video"
+            mediaList={mediaList}
+            selectedMedia={block._media}
+            onSelect={onMediaSelect}
+            onClear={() => onMediaSelect(null)}
           />
           <Input
             label="Thời lượng (giây)"
@@ -158,11 +319,12 @@ function BlockEditor({
 
       {block.type === "image" && (
         <div className="space-y-3">
-          <Input
-            label="URL Ảnh *"
-            value={block.url ?? ""}
-            onChange={(e) => onChange("url", e.target.value)}
-            placeholder="https://..."
+          <MediaPicker
+            mediaType="image"
+            mediaList={mediaList}
+            selectedMedia={block._media}
+            onSelect={onMediaSelect}
+            onClear={() => onMediaSelect(null)}
           />
           <Input
             label="Caption"
@@ -187,13 +349,14 @@ function BlockEditor({
 export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonManagerProps) {
   const [lessons, setLessons] = useState<RoadmapLesson[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mediaList, setMediaList] = useState<Media[]>([]);
   const [modal, setModal] = useState<ModalMode>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [form, setForm] = useState<LessonForm>(emptyForm());
-  const [blocks, setBlocks] = useState<CreateLessonContentDto[]>([]);
+  const [blocks, setBlocks] = useState<BlockState[]>([]);
   const [attachId, setAttachId] = useState("");
 
   // ── Data loading ────────────────────────────────────────────────────────────
@@ -211,6 +374,10 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
   }, [courseId]);
 
   useEffect(() => { loadRoadmap(); }, [loadRoadmap]);
+
+  useEffect(() => {
+    mediaApi.getAll().then(setMediaList).catch(() => setMediaList([]));
+  }, []);
 
   // ── Modal helpers ───────────────────────────────────────────────────────────
 
@@ -238,7 +405,8 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
           type: c.type,
           order: c.order,
           textData: c.textData ?? undefined,
-          url: c.url ?? undefined,
+          mediaId: c.mediaId ?? undefined,
+          _media: c.media ?? null,
           duration: c.duration ?? undefined,
           caption: c.caption ?? undefined,
           altText: c.altText ?? undefined,
@@ -273,6 +441,14 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
     setBlocks((prev) => prev.map((b, i) => i === index ? { ...b, [field]: value } : b));
   };
 
+  const updateBlockMedia = (index: number, media: Media | null) => {
+    setBlocks((prev) =>
+      prev.map((b, i) =>
+        i === index ? { ...b, mediaId: media?.id ?? undefined, _media: media } : b
+      )
+    );
+  };
+
   const moveBlock = (index: number, dir: -1 | 1) => {
     const next = index + dir;
     if (next < 0 || next >= blocks.length) return;
@@ -282,6 +458,14 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
       return arr.map((b, i) => ({ ...b, order: i }));
     });
   };
+
+  // Strip _media before sending to API
+  const toApiBlocks = (bs: BlockState[]): CreateLessonContentDto[] =>
+    bs.map((b, i) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { _media, ...rest } = b;
+      return { ...rest, order: i };
+    });
 
   // ── Submit handlers ─────────────────────────────────────────────────────────
 
@@ -296,7 +480,7 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
         type: form.type,
         xpReward: form.xpReward,
         isPremium: form.isPremium,
-        contents: blocks.map((b, i) => ({ ...b, order: i })),
+        contents: toApiBlocks(blocks),
       });
       await courseApi.attachLesson(courseId, created.id);
       closeModal();
@@ -317,7 +501,7 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
         xpReward: form.xpReward,
         isPremium: form.isPremium,
         order: Number(form.order),
-        contents: blocks.map((b, i) => ({ ...b, order: i })),
+        contents: toApiBlocks(blocks),
       });
       closeModal();
       await loadRoadmap();
@@ -449,7 +633,6 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
       {isCreateOrEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
-            {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h3 className="text-lg font-bold text-gray-900">
                 {modal === "create" ? "Tạo bài học mới" : `Chỉnh sửa: ${editingLesson?.title}`}
@@ -461,13 +644,11 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
               </button>
             </div>
 
-            {/* Modal body — scrollable */}
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg">{error}</div>
               )}
 
-              {/* Basic info */}
               <div className="space-y-4">
                 <Input
                   label="Tiêu đề *"
@@ -513,34 +694,26 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
                 </div>
               </div>
 
-              {/* Content blocks */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-gray-700">
                     Nội dung ({blocks.length} block{blocks.length !== 1 ? "s" : ""})
                   </h4>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => addBlock("text" as ContentBlockType)}
-                      className="px-3 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition"
-                    >
-                      + Text
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addBlock("video" as ContentBlockType)}
-                      className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition"
-                    >
-                      + Video
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addBlock("image" as ContentBlockType)}
-                      className="px-3 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition"
-                    >
-                      + Ảnh
-                    </button>
+                    {(["text", "video", "image"] as ContentBlockType[]).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => addBlock(t)}
+                        className={`px-3 py-1 text-xs font-medium rounded-lg border transition ${
+                          t === "text" ? "text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200" :
+                          t === "video" ? "text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200" :
+                          "text-green-700 bg-green-50 hover:bg-green-100 border-green-200"
+                        }`}
+                      >
+                        + {t === "text" ? "Text" : t === "video" ? "Video" : "Ảnh"}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -556,7 +729,9 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
                         block={block}
                         index={index}
                         total={blocks.length}
+                        mediaList={mediaList}
                         onChange={(field, value) => updateBlock(index, field, value)}
+                        onMediaSelect={(media) => updateBlockMedia(index, media)}
                         onRemove={() => removeBlock(index)}
                         onMoveUp={() => moveBlock(index, -1)}
                         onMoveDown={() => moveBlock(index, 1)}
@@ -567,13 +742,9 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
               </div>
             </div>
 
-            {/* Modal footer */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t shrink-0">
               <Button variant="outline" onClick={closeModal}>Hủy</Button>
-              <Button
-                onClick={modal === "create" ? handleCreate : handleEdit}
-                disabled={saving}
-              >
+              <Button onClick={modal === "create" ? handleCreate : handleEdit} disabled={saving}>
                 {saving
                   ? modal === "create" ? "Đang tạo..." : "Đang lưu..."
                   : modal === "create" ? "Tạo & Gắn vào khóa học" : "Lưu thay đổi"}
@@ -608,7 +779,9 @@ export function CourseLessonManager({ courseId, onNext, onBack }: CourseLessonMa
               />
               <div className="flex justify-end gap-3 pt-2 border-t">
                 <Button variant="outline" onClick={closeModal}>Hủy</Button>
-                <Button onClick={handleAttach} disabled={saving}>{saving ? "Đang gắn..." : "Gắn vào khóa học"}</Button>
+                <Button onClick={handleAttach} disabled={saving}>
+                  {saving ? "Đang gắn..." : "Gắn vào khóa học"}
+                </Button>
               </div>
             </div>
           </div>

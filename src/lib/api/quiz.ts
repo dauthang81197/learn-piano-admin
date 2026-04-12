@@ -8,12 +8,12 @@ export const quizApi = {
   },
 
   create: async (data: CreateQuizDto): Promise<Quiz> => {
-    const response = await apiClient.post("/quiz", data);
+    const response = await apiClient.post("/admin/quiz", data);
     return response.data;
   },
 
   update: async (lessonId: string, data: CreateQuizDto): Promise<Quiz> => {
-    const response = await apiClient.put(`/quiz/${lessonId}`, data);
+    const response = await apiClient.put(`/admin/quiz/${lessonId}`, data);
     return response.data;
   },
 };

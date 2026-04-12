@@ -4,27 +4,27 @@ import type { PaginatedResponse, PaginationParams } from "../types";
 
 export const courseApi = {
   getAll: async (params?: PaginationParams): Promise<PaginatedResponse<Course>> => {
-    const response = await apiClient.get("/courses", { params });
+    const response = await apiClient.get("/admin/courses", { params });
     return response.data;
   },
 
   getById: async (id: string): Promise<Course> => {
-    const response = await apiClient.get(`/courses/${id}`);
+    const response = await apiClient.get(`/admin/courses/${id}`);
     return response.data;
   },
 
   create: async (data: CreateCourseDto): Promise<Course> => {
-    const response = await apiClient.post("/courses", data);
+    const response = await apiClient.post("/admin/courses", data);
     return response.data;
   },
 
   update: async (id: string, data: UpdateCourseDto): Promise<Course> => {
-    const response = await apiClient.put(`/courses/${id}`, data);
+    const response = await apiClient.put(`/admin/courses/${id}`, data);
     return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/courses/${id}`);
+    await apiClient.delete(`/admin/courses/${id}`);
   },
 
   getRoadmap: async (courseId: string): Promise<RoadmapResponse> => {
@@ -33,11 +33,11 @@ export const courseApi = {
   },
 
   attachLesson: async (courseId: string, lessonId: string): Promise<void> => {
-    await apiClient.post(`/courses/${courseId}/lessons/${lessonId}`);
+    await apiClient.post(`/admin/courses/${courseId}/lessons/${lessonId}`);
   },
 
   detachLesson: async (courseId: string, lessonId: string): Promise<void> => {
-    await apiClient.delete(`/courses/${courseId}/lessons/${lessonId}`);
+    await apiClient.delete(`/admin/courses/${courseId}/lessons/${lessonId}`);
   },
 
   uploadThumbnail: async (
@@ -47,7 +47,7 @@ export const courseApi = {
   ): Promise<{ thumbnail: string; message: string }> => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await apiClient.post(`/courses/${courseId}/thumbnail`, formData, {
+    const response = await apiClient.post(`/admin/courses/${courseId}/thumbnail`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (e) => {
         if (e.total && onProgress) onProgress(Math.round((e.loaded * 100) / e.total));
